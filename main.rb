@@ -1,67 +1,116 @@
 require "minruby"
 
-def eval(tree, env)
+def eval(tree, genv, lenv)
     case tree[0]
     when "lit"
         tree[1]
     when "**"
-        eval(tree[1], env) ** eval(tree[2], env)
+        eval(tree[1], genv, lenv) ** eval(tree[2], genv, lenv)
     when "%"
-        eval(tree[1], env) % eval(tree[2], env)
+        eval(tree[1], genv, lenv) % eval(tree[2], genv, lenv)
     when "+"
-        if env.key?("plus_count")
-            env["plus_count"] += 1
+        if lenv["plus_count"] != nil
+            lenv["plus_count"] = lenv["plus_count"] + 1
+        else
+            0
         end
-        eval(tree[1], env) + eval(tree[2], env)
+        eval(tree[1], genv, lenv) + eval(tree[2], genv, lenv)
     when "-"
-        eval(tree[1], env) - eval(tree[2], env)
+        eval(tree[1], genv, lenv) - eval(tree[2], genv, lenv)
     when "*"
-        eval(tree[1], env) * eval(tree[2], env)
+        eval(tree[1], genv, lenv) * eval(tree[2], genv, lenv)
     when "/"
-        eval(tree[1], env) / eval(tree[2], env)
+        eval(tree[1], genv, lenv) / eval(tree[2], genv, lenv)
     when "=="
-        eval(tree[1], env) == eval(tree[2], env)
+        eval(tree[1], genv, lenv) == eval(tree[2], genv, lenv)
     when "!="
-        eval(tree[1], env) != eval(tree[2], env)
+        eval(tree[1], genv, lenv) != eval(tree[2], genv, lenv)
     when "<"
-        eval(tree[1], env) < eval(tree[2], env)
+        eval(tree[1], genv, lenv) < eval(tree[2], genv, lenv)
     when ">"
-        eval(tree[1], env) > eval(tree[2], env)
+        eval(tree[1], genv, lenv) > eval(tree[2], genv, lenv)
     when "<="
-        eval(tree[1], env) <= eval(tree[2], env)
+        eval(tree[1], genv, lenv) <= eval(tree[2], genv, lenv)
     when ">="
-        eval(tree[1], env) >= eval(tree[2], env)
+        eval(tree[1], genv, lenv) >= eval(tree[2], genv, lenv)
+    when "func_def"
+        genv[tree[1]] = ["user_defined", tree[2], tree[3]]
     when "func_call"
-        p(eval(tree[2], env))
+        args = []
+        i = 0
+        while tree[i + 2] 
+            args[i] = eval(tree[i + 2], genv, lenv)
+            i = i + 1
+        end
+        mhd = genv[tree[1]]
+        if mhd[0] == "builtin"
+            minruby_call(mhd[1], args)
+        else 
+            new_lenv = {}
+            params = mhd[1]
+            i = 0
+            while params[i]
+                new_lenv[params[i]] = args[i]
+                i = i + 1
+            end
+            eval(mhd[2], genv, new_lenv)
+        end
     when "stmts"
         i = 1
         last = nil
         while tree[i] != nil
-            last = eval(tree[i], env)
+            last = eval(tree[i], genv, lenv)
             i = i + 1
         end
         last
     when "var_assign"
-        env[tree[1]] = eval(tree[2], env)
+        lenv[tree[1]] = eval(tree[2], genv, lenv)
     when "var_ref"
-        env[tree[1]]
+        lenv[tree[1]]
     when "if"
-        if eval(tree[1], env)
-            eval(tree[2], env)
+        if eval(tree[1], genv, lenv)
+            eval(tree[2], genv, lenv)
         else 
-            eval(tree[3], env)
+            eval(tree[3], genv, lenv)
         end
     when "while"
-        while eval(tree[1], env)
-            eval(tree[2], env)
+        while eval(tree[1], genv, lenv)
+            eval(tree[2], genv, lenv)
         end
     when "while2"
-        eval(tree[2], env)
-        while eval(tree[1], env)
-            eval(tree[2], env)
+        eval(tree[2], genv, lenv)
+        while eval(tree[1], genv, lenv)
+            eval(tree[2], genv, lenv)
         end
+    when "ary_new"
+        ary = []
+        i = 0
+        while tree[i + 1]
+            ary[i] = eval(tree[i + 1], genv, lenv)
+            i = i + 1
+        end
+        ary
+    when "ary_ref"
+        ary = eval(tree[1], genv, lenv)
+        idx = eval(tree[2], genv, lenv)
+        ary[idx]
+    when "ary_assign"
+        ary = eval(tree[1], genv, lenv)
+        idx = eval(tree[2], genv, lenv)
+        val = eval(tree[3], genv, lenv)
+        ary[idx] = val
+    when "hash_new"
+        hsh = {}
+        i = 0
+        while tree[i + 1]
+            key = eval(tree[i + 1], genv, lenv)
+            val = eval(tree[i + 2], genv, lenv)
+            hsh[key] = val
+            i = i + 2
+        end
+        hsh
     else
-        p "unknown node: #{tree[0]}"
+        raise "Unknown node:"
     end
 end
 
@@ -81,11 +130,36 @@ def max(tree)
             mx = m
         end
     end
-    return mx
+    mx
 end
 
-env = {}
+def add(x, y)
+    x + y
+end
+
+def fizzbuzz(n)
+    if n % 15 == 0
+        p "FizzBuzz"
+    elsif n % 3 == 0
+        p "Fizz"
+    elsif n % 5 == 0
+        p "Buzz"
+    else 
+        p n
+    end
+end
+
+genv = {
+    "p" => ["builtin", "p"],
+    "raise" => ["builtin", "raise"],
+    "require" => ["builtin", "require"],
+    "minruby_parse" => ["builtin", "minruby_parse"],
+    "minruby_load" => ["builtin", "minruby_load"],
+    "minruby_call" => ["builtin", "minruby_call"],
+}
+
+lenv = {}
 input = minruby_load()
 tree = minruby_parse(input)
-p(tree)
-eval(tree, env)
+# p(tree)
+eval(tree, genv, lenv)
